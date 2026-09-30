@@ -1,5 +1,4 @@
-﻿
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 
 import { useNavigate } from "react-router-dom";
 
@@ -221,7 +220,6 @@ function Dashboard() {
       setApps(
         data.apps || []
       );
-
     } catch (err) {
       console.error(
         "My apps loading error:",
@@ -244,7 +242,6 @@ function Dashboard() {
           err.message ||
           "Apps load nahi ho paye."
       );
-
     } finally {
       setAppsLoading(false);
     }
@@ -305,7 +302,6 @@ function Dashboard() {
         github:
           data.github || "",
       });
-
     } catch (err) {
       console.error(
         "Developer profile loading error:",
@@ -328,7 +324,6 @@ function Dashboard() {
           err.message ||
           "Developer profile load nahi ho paya."
       );
-
     } finally {
       setProfileLoading(false);
     }
@@ -359,7 +354,6 @@ function Dashboard() {
         );
 
       setPaymentStatus(data);
-
     } catch (err) {
       console.error(
         "Developer payment status error:",
@@ -382,7 +376,6 @@ function Dashboard() {
           err.message ||
           "Payment status load nahi ho paya."
       );
-
     } finally {
       setPaymentLoading(false);
     }
@@ -533,7 +526,6 @@ function Dashboard() {
       setProfileMessage(
         "Developer profile successfully save ho gaya."
       );
-
     } catch (err) {
       console.error(
         "Developer profile save error:",
@@ -556,7 +548,6 @@ function Dashboard() {
           err.message ||
           "Developer profile save nahi ho paya."
       );
-
     } finally {
       setProfileSaving(false);
     }
@@ -829,7 +820,6 @@ function Dashboard() {
       }
 
       await loadMyApps();
-
     } catch (err) {
       console.error(
         "App upload error:",
@@ -852,7 +842,6 @@ function Dashboard() {
           err.message ||
           "App upload nahi ho paya."
       );
-
     } finally {
       setLoading(false);
     }
@@ -1051,7 +1040,6 @@ function Dashboard() {
       handleCancelUpdate();
 
       await loadMyApps();
-
     } catch (err) {
       console.error(
         "App update error:",
@@ -1074,7 +1062,6 @@ function Dashboard() {
           err.message ||
           "App update nahi ho paya."
       );
-
     } finally {
       setUpdateLoading(false);
     }
@@ -1137,7 +1124,6 @@ function Dashboard() {
       }
 
       await loadMyApps();
-
     } catch (err) {
       console.error(
         "App delete error:",
@@ -1160,7 +1146,6 @@ function Dashboard() {
           err.message ||
           "App delete nahi ho paya."
       );
-
     } finally {
       setDeletingAppId(null);
     }
@@ -1203,7 +1188,7 @@ function Dashboard() {
     if (
       fileType === ".aab"
     ) {
-      return "AAB ? APK";
+      return "AAB → APK";
     }
 
     return "APK";
@@ -1354,10 +1339,10 @@ function Dashboard() {
             </h1>
 
             <p>
-              APK ?? AAB applications
-              upload ????, versions manage
-              ???? ?? ???? apps ?? performance
-              statistics ??????
+              APK और AAB applications upload
+              करें, versions manage करें और
+              अपने apps की performance
+              statistics देखें।
             </p>
 
             <div className="hero-actions">
@@ -1377,7 +1362,7 @@ function Dashboard() {
                     handleOpenPayment
                   }
                 >
-                  Pay ?{paymentAmount}
+                  Pay ₹{paymentAmount}
                 </button>
               ) : (
                 <a
@@ -1440,7 +1425,7 @@ function Dashboard() {
 
               <p>
                 Developer registration, payment
-                ?? verification status.
+                and verification status.
               </p>
 
             </div>
@@ -1550,7 +1535,7 @@ function Dashboard() {
                   </span>
 
                   <strong>
-                    ?{paymentAmount}
+                    ₹{paymentAmount}
                   </strong>
 
                 </div>
@@ -1566,7 +1551,7 @@ function Dashboard() {
                 >
 
                   <div className="alert-icon">
-                    ?
+                    !
                   </div>
 
                   <div>
@@ -1578,8 +1563,7 @@ function Dashboard() {
                     <p>
                       Developer registration
                       continue karne ke liye
-                      one-time ?
-                      {paymentAmount}{" "}
+                      one-time ₹{paymentAmount}{" "}
                       {paymentCurrency} payment
                       complete karein.
                     </p>
@@ -1591,7 +1575,7 @@ function Dashboard() {
                         handleOpenPayment
                       }
                     >
-                      Pay ?{paymentAmount}
+                      Pay ₹{paymentAmount}
                     </button>
 
                   </div>
@@ -1609,7 +1593,7 @@ function Dashboard() {
                   >
 
                     <div className="alert-icon">
-                      ?
+                      ✓
                     </div>
 
                     <div>
@@ -1639,7 +1623,7 @@ function Dashboard() {
                   >
 
                     <div className="alert-icon">
-                      ?
+                      ✓
                     </div>
 
                     <div>
@@ -1652,7 +1636,8 @@ function Dashboard() {
                         Payment requirement is
                         currently not active.
                         Developer verification
-                        status ??????
+                        status is available
+                        in your account.
                       </p>
 
                     </div>
@@ -1770,7 +1755,7 @@ function Dashboard() {
           <div className="alert alert-success">
 
             <div className="alert-icon">
-              ?
+              ✓
             </div>
 
             <div>
@@ -1862,7 +1847,7 @@ function Dashboard() {
             <div className="alert alert-success">
 
               <div className="alert-icon">
-              ?
+                ✓
               </div>
 
               <div>
@@ -1995,7 +1980,7 @@ function Dashboard() {
 
                         <strong>
                           {developerProfile.country ||
-                            "?"}
+                            "—"}
                         </strong>
                       </div>
 
@@ -2006,7 +1991,7 @@ function Dashboard() {
 
                         <strong>
                           {developerProfile.phone ||
-                            "?"}
+                            "—"}
                         </strong>
                       </div>
 
@@ -2017,7 +2002,7 @@ function Dashboard() {
 
                         <strong>
                           {developerProfile.company_name ||
-                            "?"}
+                            "—"}
                         </strong>
                       </div>
 
@@ -2028,7 +2013,7 @@ function Dashboard() {
 
                         <strong>
                           {developerProfile.website ||
-                            "?"}
+                            "—"}
                         </strong>
                       </div>
 
@@ -2039,7 +2024,7 @@ function Dashboard() {
 
                         <strong>
                           {developerProfile.github ||
-                            "?"}
+                            "—"}
                         </strong>
                       </div>
 
@@ -2050,7 +2035,7 @@ function Dashboard() {
 
                         <strong>
                           {developerProfile.address ||
-                            "?"}
+                            "—"}
                         </strong>
                       </div>
 
@@ -2695,7 +2680,7 @@ function Dashboard() {
                       >
 
                         <span className="file-upload-icon">
-                          ?
+                          +
                         </span>
 
                         <span>
@@ -2723,7 +2708,7 @@ function Dashboard() {
 
                       {icon && (
                         <div className="selected-file">
-                          ? {icon.name}
+                          ✓ {icon.name}
                         </div>
                       )}
 
@@ -2737,7 +2722,7 @@ function Dashboard() {
                       >
 
                         <span className="file-upload-icon">
-                          ?
+                          ↑
                         </span>
 
                         <span>
@@ -2767,7 +2752,7 @@ function Dashboard() {
 
                       {file && (
                         <div className="selected-file">
-                          ? {file.name}
+                          ✓ {file.name}
                         </div>
                       )}
 
@@ -2828,9 +2813,9 @@ function Dashboard() {
               </h2>
 
               <p>
-                App upload, update ?? publishing
-                ?? ??? developer account ?? active
-                ???? ????? ???
+                App upload, update और publishing
+                के लिए आपका developer account active
+                होना जरूरी है।
               </p>
 
               {paymentRequired && (
@@ -2841,7 +2826,7 @@ function Dashboard() {
                     handleOpenPayment
                   }
                 >
-                  Pay ?{paymentAmount}
+                  Pay ₹{paymentAmount}
                 </button>
               )}
 
@@ -3086,7 +3071,7 @@ function Dashboard() {
                     <div className="rating-row">
 
                       <span className="rating-stars">
-                        ?
+                        ★
                       </span>
 
                       <strong>
@@ -3224,7 +3209,7 @@ function Dashboard() {
                               updateLoading
                             }
                           >
-                            Ã—
+                            ×
                           </button>
 
                         </div>
@@ -3375,7 +3360,7 @@ function Dashboard() {
                             >
 
                               <span className="file-upload-icon">
-                                ?
+                                +
                               </span>
 
                               <span>
@@ -3403,7 +3388,7 @@ function Dashboard() {
 
                             {updateIcon && (
                               <div className="selected-file">
-                                ?{" "}
+                                ✓{" "}
                                 {
                                   updateIcon.name
                                 }
@@ -3420,7 +3405,7 @@ function Dashboard() {
                             >
 
                               <span className="file-upload-icon">
-                                ?
+                                ↑
                               </span>
 
                               <span>
@@ -3449,7 +3434,7 @@ function Dashboard() {
 
                             {updateFile && (
                               <div className="selected-file">
-                                ?{" "}
+                                ✓{" "}
                                 {
                                   updateFile.name
                                 }
@@ -3529,5 +3514,3 @@ function Dashboard() {
 }
 
 export default Dashboard;
-
-

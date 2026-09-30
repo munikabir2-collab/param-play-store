@@ -5,52 +5,30 @@ from app.api import apps as apps_router
 from app.api import auth as auth_router
 from app.api import developers as developers_router
 
-
 app = FastAPI(
     title="NextStore Backend",
     description="A transparent, developer-friendly app marketplace backend",
     version="0.1.0",
 )
 
-
-# =========================================================
-# CORS
-# =========================================================
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+app.include_router(auth_router.router)
+app.include_router(apps_router.router)
+app.include_router(developers_router.router)
+app.include_router(payments_router.router)
 
-# =========================================================
-# API ROUTERS
-# =========================================================
-
-app.include_router(
-    auth_router.router
-)
-
-app.include_router(
-    apps_router.router
-)
-
-app.include_router(
-    developers_router.router
-)
-
-app.include_router(
-    payments_router.router)
-    
-# =========================================================
-# ROOT
-# =========================================================
 
 @app.get("/")
 def root():

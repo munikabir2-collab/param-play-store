@@ -1,7 +1,9 @@
-
+﻿
 import axios from "axios";
 
-const API_URL = "http://127.0.0.1:8000";
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  "http://127.0.0.1:8000";
 
 const api = axios.create({
   baseURL: API_URL,
@@ -14,9 +16,7 @@ const api = axios.create({
 // SIGNUP
 // =======================================================
 
-export const signupUser = async (
-  userData
-) => {
+export const signupUser = async (userData) => {
   const response = await api.post(
     "/auth/signup",
     userData
@@ -35,15 +35,8 @@ export const loginUser = async (
 ) => {
   const formData = new URLSearchParams();
 
-  formData.append(
-    "username",
-    email
-  );
-
-  formData.append(
-    "password",
-    password
-  );
+  formData.append("username", email);
+  formData.append("password", password);
 
   const response = await api.post(
     "/auth/login",
@@ -60,14 +53,30 @@ export const loginUser = async (
 };
 
 // =======================================================
+// CURRENT USER
+// =======================================================
+
+export const getCurrentUser = async (
+  token
+) => {
+  const response = await api.get(
+    "/auth/me",
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+
+  return response.data;
+};
+
+// =======================================================
 // PUBLIC APPS
 // =======================================================
 
 export const getApps = async () => {
-  const response = await api.get(
-    "/apps/"
-  );
-
+  const response = await api.get("/apps/");
   return response.data;
 };
 
@@ -98,10 +107,7 @@ export const applyDeveloper = async (
     application,
     {
       headers: {
-        Authorization:
-          `Bearer ${token}`,
-        "Content-Type":
-          "application/json",
+        Authorization: `Bearer ${token}`,
       },
     }
   );
@@ -120,8 +126,7 @@ export const getDeveloperMe = async (
     "/developers/me",
     {
       headers: {
-        Authorization:
-          `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
       },
     }
   );
@@ -139,8 +144,7 @@ export const getMyDeveloperProfile =
       "/developers/me/account",
       {
         headers: {
-          Authorization:
-            `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
       }
     );
@@ -162,10 +166,8 @@ export const updateMyDeveloperProfile =
       profileData,
       {
         headers: {
-          Authorization:
-            `Bearer ${token}`,
-          "Content-Type":
-            "application/json",
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         },
       }
     );
@@ -183,8 +185,7 @@ export const getDeveloperVerificationStatus =
       "/developers/verification-status",
       {
         headers: {
-          Authorization:
-            `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
       }
     );
@@ -193,7 +194,7 @@ export const getDeveloperVerificationStatus =
   };
 
 // =======================================================
-// PAYMENT STATUS
+// DEVELOPER PAYMENT STATUS
 // =======================================================
 
 export const getDeveloperPaymentStatus =
@@ -202,8 +203,7 @@ export const getDeveloperPaymentStatus =
       "/payments/developer/status",
       {
         headers: {
-          Authorization:
-            `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
       }
     );
@@ -227,10 +227,8 @@ export const createDeveloperPaymentOrder =
       },
       {
         headers: {
-          Authorization:
-            `Bearer ${token}`,
-          "Content-Type":
-            "application/json",
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         },
       }
     );
@@ -252,21 +250,14 @@ export const verifyDeveloperPayment =
     const response = await api.post(
       "/payments/developer/verify",
       {
-        order_id:
-          orderId,
-
-        payment_id:
-          paymentId,
-
-        signature:
-          signature,
+        order_id: orderId,
+        payment_id: paymentId,
+        signature,
       },
       {
         headers: {
-          Authorization:
-            `Bearer ${token}`,
-          "Content-Type":
-            "application/json",
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         },
       }
     );
@@ -338,8 +329,7 @@ export const uploadApp = async (
     formData,
     {
       headers: {
-        Authorization:
-          `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
       },
     }
   );
@@ -358,8 +348,7 @@ export const getMyApps = async (
     "/apps/mine",
     {
       headers: {
-        Authorization:
-          `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
       },
     }
   );
@@ -444,8 +433,7 @@ export const updateApp = async (
     formData,
     {
       headers: {
-        Authorization:
-          `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
       },
     }
   );
@@ -465,28 +453,7 @@ export const deleteApp = async (
     `/apps/${appId}`,
     {
       headers: {
-        Authorization:
-          `Bearer ${token}`,
-      },
-    }
-  );
-
-  return response.data;
-};
-
-// =======================================================
-// CURRENT USER PROFILE
-// =======================================================
-
-export const getCurrentUser = async (
-  token
-) => {
-  const response = await api.get(
-    "/auth/me",
-    {
-      headers: {
-        Authorization:
-          `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
       },
     }
   );
