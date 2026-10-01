@@ -1,4 +1,3 @@
-
 import os
 import uuid
 import zipfile
@@ -14,7 +13,10 @@ from fastapi import (
     Depends,
 )
 
-from fastapi.responses import FileResponse
+from fastapi.responses import (
+    FileResponse,
+    StreamingResponse,
+)
 
 from sqlalchemy.orm import Session
 
@@ -40,6 +42,8 @@ from app.services.aab_converter import (
     convert_aab_to_apk,
     ConversionError,
 )
+
+from app.services import b2_storage
 
 
 router = APIRouter(
@@ -197,6 +201,100 @@ def ensure_safe_icon_path(
         )
 
     return candidate
+
+
+# =========================================================
+# B2 STORAGE HELPERS
+# =========================================================
+
+def is_b2_object(
+    value: str | None,
+) -> bool:
+
+    if not value:
+        return False
+
+    return (
+        value.startswith("apps/")
+        or value.startswith("icons/")
+    )
+
+
+def get_b2_app_key(
+    developer_id: int,
+) -> str:
+
+    return (
+        f"apps/{developer_id}/"
+        f"{uuid.uuid4().hex}.apk"
+    )
+
+
+def get_b2_icon_key(
+    developer_id: int,
+    extension: str,
+) -> str:
+
+    return (
+        f"icons/{developer_id}/"
+        f"{uuid.uuid4().hex}{extension}"
+    )
+
+
+def get_storage_name(
+    storage_path: str | None,
+) -> str | None:
+
+    if not storage_path:
+        return None
+
+    return os.path.basename(
+        storage_path
+    )
+
+
+def delete_stored_file(
+    storage_path: str | None,
+) -> None:
+
+    if not storage_path:
+        return
+
+    if is_b2_object(
+        storage_path
+    ):
+
+        b2_storage.delete_file(
+            storage_path
+        )
+
+        return
+
+    safe_remove(
+        storage_path
+    )
+
+
+def delete_stored_icon(
+    icon_path: str | None,
+) -> None:
+
+    if not icon_path:
+        return
+
+    if is_b2_object(
+        icon_path
+    ):
+
+        b2_storage.delete_file(
+            icon_path
+        )
+
+        return
+
+    safe_remove_icon(
+        icon_path
+    )
 
 
 # =========================================================
@@ -872,6 +970,7 @@ async def upload_app(
     current_user: User = Depends(
         get_current_user
     ),
+
 ):
 
     if current_user is None:
@@ -945,7 +1044,10 @@ async def upload_app(
     final_path = original_path
 
     icon_file_path = None
-    icon_path = None
+
+    b2_app_key = None
+
+    b2_icon_key = None
 
     if icon is not None:
 
@@ -959,6 +1061,10 @@ async def upload_app(
         )
 
     try:
+
+        # =====================================================
+        # SAVE TEMP PACKAGE LOCALLY
+        # =====================================================
 
         uploaded_bytes = (
             await save_upload_stream(
@@ -974,6 +1080,10 @@ async def upload_app(
                 detail="Uploaded file empty hai",
             )
 
+        # =====================================================
+        # VALIDATE ORIGINAL PACKAGE
+        # =====================================================
+
         try:
 
             validate_archive(
@@ -987,6 +1097,10 @@ async def upload_app(
                 status_code=400,
                 detail=str(exc),
             )
+
+        # =====================================================
+        # AAB -> APK
+        # =====================================================
 
         if ext == ".aab":
 
@@ -1044,6 +1158,10 @@ async def upload_app(
                 original_path
             )
 
+        # =====================================================
+        # FINAL LOCAL APK VALIDATION
+        # =====================================================
+
         final_path = (
             ensure_safe_storage_path(
                 final_path
@@ -1091,6 +1209,10 @@ async def upload_app(
             / (1024 * 1024)
         )
 
+        # =====================================================
+        # SAVE TEMP ICON
+        # =====================================================
+
         if icon is not None:
 
             icon_bytes = (
@@ -1109,11 +1231,72 @@ async def upload_app(
                     ),
                 )
 
-            icon_path = str(
-                ensure_safe_icon_path(
-                    icon_file_path
-                )
+            ensure_safe_icon_path(
+                icon_file_path
             )
+
+        # =====================================================
+        # UPLOAD APK TO B2
+        # =====================================================
+
+        b2_app_key = get_b2_app_key(
+            current_user.id
+        )
+
+        b2_storage.upload_file(
+            final_path,
+            b2_app_key,
+            "application/vnd.android.package-archive",
+        )
+
+        # =====================================================
+        # UPLOAD ICON TO B2
+        # =====================================================
+
+        if icon_file_path is not None:
+
+            icon_ext = (
+                icon_file_path
+                .suffix
+                .lower()
+            )
+
+            b2_icon_key = get_b2_icon_key(
+                current_user.id,
+                icon_ext,
+            )
+
+            icon_media_types = {
+
+                ".png":
+                    "image/png",
+
+                ".jpg":
+                    "image/jpeg",
+
+                ".jpeg":
+                    "image/jpeg",
+
+                ".webp":
+                    "image/webp",
+
+                ".svg":
+                    "image/svg+xml",
+
+            }
+
+            b2_storage.upload_file(
+                icon_file_path,
+                b2_icon_key,
+                icon_media_types.get(
+                    icon_ext,
+                    "application/octet-stream",
+                ),
+            )
+
+        # =====================================================
+        # DATABASE
+        # =====================================================
 
         new_app = App(
 
@@ -1125,11 +1308,11 @@ async def upload_app(
 
             version=version,
 
-            file_type=ext,
+            # AAB is converted into APK.
+            file_type=".apk",
 
-            file_path=str(
-                final_path
-            ),
+            # B2 object key is stored in DB.
+            file_path=b2_app_key,
 
             size_mb=round(
                 final_size_mb,
@@ -1142,7 +1325,7 @@ async def upload_app(
 
             changelog=changelog,
 
-            icon_path=icon_path,
+            icon_path=b2_icon_key,
 
         )
 
@@ -1159,6 +1342,18 @@ async def upload_app(
     except HTTPException:
 
         db.rollback()
+
+        if b2_app_key:
+
+            b2_storage.delete_file(
+                b2_app_key
+            )
+
+        if b2_icon_key:
+
+            b2_storage.delete_file(
+                b2_icon_key
+            )
 
         safe_remove(
             final_path
@@ -1182,6 +1377,18 @@ async def upload_app(
     except Exception:
 
         db.rollback()
+
+        if b2_app_key:
+
+            b2_storage.delete_file(
+                b2_app_key
+            )
+
+        if b2_icon_key:
+
+            b2_storage.delete_file(
+                b2_icon_key
+            )
 
         safe_remove(
             final_path
@@ -1207,11 +1414,32 @@ async def upload_app(
             ),
         )
 
+    # =====================================================
+    # TEMP LOCAL FILE CLEANUP
+    # =====================================================
+
+    safe_remove(
+        final_path
+    )
+
+    if (
+        str(original_path)
+        != str(final_path)
+    ):
+
+        safe_remove(
+            original_path
+        )
+
+    safe_remove_icon(
+        icon_file_path
+    )
+
     return AppUploadResponse(
 
         message=(
-            "App upload ho gaya aur database "
-            "mein save ho gaya"
+            "App upload ho gaya aur Backblaze B2 "
+            "storage mein save ho gaya"
         ),
 
         app_name=new_app.app_name,
@@ -1227,7 +1455,7 @@ async def upload_app(
             2,
         ),
 
-        stored_as=os.path.basename(
+        stored_as=get_storage_name(
             new_app.file_path
         ),
 
@@ -1287,7 +1515,7 @@ def list_apps(
 
                 "size_mb": app.size_mb,
 
-                "stored_as": os.path.basename(
+                "stored_as": get_storage_name(
                     app.file_path
                 ),
 
@@ -1407,7 +1635,7 @@ def list_my_apps(
 
                 "size_mb": app.size_mb,
 
-                "stored_as": os.path.basename(
+                "stored_as": get_storage_name(
                     app.file_path
                 ),
 
@@ -1512,6 +1740,91 @@ def get_app_icon(
             ),
         )
 
+    media_types = {
+
+        ".png":
+            "image/png",
+
+        ".jpg":
+            "image/jpeg",
+
+        ".jpeg":
+            "image/jpeg",
+
+        ".webp":
+            "image/webp",
+
+        ".svg":
+            "image/svg+xml",
+
+    }
+
+    extension = os.path.splitext(
+        app.icon_path
+    )[1].lower()
+
+    media_type = media_types.get(
+        extension,
+        "application/octet-stream",
+    )
+
+    # =====================================================
+    # B2 ICON
+    # =====================================================
+
+    if is_b2_object(
+        app.icon_path
+    ):
+
+        try:
+
+            response = (
+                b2_storage.download_file(
+                    app.icon_path
+                )
+            )
+
+        except Exception:
+
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    "App icon B2 storage me nahi mila"
+                ),
+            )
+
+        headers = {}
+
+        if response.get(
+            "ContentLength"
+        ) is not None:
+
+            headers[
+                "Content-Length"
+            ] = str(
+                response[
+                    "ContentLength"
+                ]
+            )
+
+        return StreamingResponse(
+
+            response[
+                "Body"
+            ].iter_chunks(
+                chunk_size=256 * 1024
+            ),
+
+            media_type=media_type,
+
+            headers=headers,
+
+        )
+
+    # =====================================================
+    # LEGACY LOCAL ICON
+    # =====================================================
+
     icon_path = (
         ensure_safe_icon_path(
             app.icon_path
@@ -1535,30 +1848,6 @@ def get_app_icon(
                 "App icon valid file nahi hai"
             ),
         )
-
-    media_types = {
-
-        ".png":
-            "image/png",
-
-        ".jpg":
-            "image/jpeg",
-
-        ".jpeg":
-            "image/jpeg",
-
-        ".webp":
-            "image/webp",
-
-        ".svg":
-            "image/svg+xml",
-
-    }
-
-    media_type = media_types.get(
-        icon_path.suffix.lower(),
-        "application/octet-stream",
-    )
 
     return FileResponse(
         path=str(
@@ -1630,7 +1919,7 @@ def get_app_details(
 
         size_mb=app.size_mb,
 
-        stored_as=os.path.basename(
+        stored_as=get_storage_name(
             app.file_path
         ),
 
@@ -1659,9 +1948,6 @@ def get_app_details(
             app.status
         ),
 
-        # IMPORTANT:
-        # Existing database records may contain NULL.
-        # AppDetailsResponse expects a string.
         changelog=(
             app.changelog or ""
         ),
@@ -1808,10 +2094,8 @@ async def update_app(
 
     new_final_path = original_path
 
-    old_path = (
-        ensure_safe_storage_path(
-            app.file_path
-        )
+    old_storage_path = (
+        app.file_path
     )
 
     old_icon_path = (
@@ -1819,7 +2103,10 @@ async def update_app(
     )
 
     new_icon_file_path = None
-    new_icon_path = None
+
+    b2_app_key = None
+
+    b2_icon_key = None
 
     if icon is not None:
 
@@ -1835,6 +2122,10 @@ async def update_app(
         )
 
     try:
+
+        # =====================================================
+        # SAVE NEW PACKAGE LOCALLY
+        # =====================================================
 
         uploaded_bytes = (
             await save_upload_stream(
@@ -1852,6 +2143,10 @@ async def update_app(
                 ),
             )
 
+        # =====================================================
+        # VALIDATE PACKAGE
+        # =====================================================
+
         try:
 
             validate_archive(
@@ -1865,6 +2160,10 @@ async def update_app(
                 status_code=400,
                 detail=str(exc),
             )
+
+        # =====================================================
+        # AAB -> APK
+        # =====================================================
 
         if ext == ".aab":
 
@@ -1922,6 +2221,10 @@ async def update_app(
                 original_path
             )
 
+        # =====================================================
+        # FINAL PACKAGE VALIDATION
+        # =====================================================
+
         new_final_path = (
             ensure_safe_storage_path(
                 new_final_path
@@ -1969,6 +2272,10 @@ async def update_app(
             / (1024 * 1024)
         )
 
+        # =====================================================
+        # NEW ICON LOCAL TEMP FILE
+        # =====================================================
+
         if icon is not None:
 
             icon_bytes = (
@@ -1987,19 +2294,79 @@ async def update_app(
                     ),
                 )
 
-            new_icon_path = str(
-                ensure_safe_icon_path(
-                    new_icon_file_path
-                )
+            ensure_safe_icon_path(
+                new_icon_file_path
             )
+
+        # =====================================================
+        # UPLOAD NEW APK TO B2
+        # =====================================================
+
+        b2_app_key = get_b2_app_key(
+            current_user.id
+        )
+
+        b2_storage.upload_file(
+            new_final_path,
+            b2_app_key,
+            "application/vnd.android.package-archive",
+        )
+
+        # =====================================================
+        # UPLOAD NEW ICON TO B2
+        # =====================================================
+
+        if new_icon_file_path is not None:
+
+            icon_ext = (
+                new_icon_file_path
+                .suffix
+                .lower()
+            )
+
+            b2_icon_key = get_b2_icon_key(
+                current_user.id,
+                icon_ext,
+            )
+
+            icon_media_types = {
+
+                ".png":
+                    "image/png",
+
+                ".jpg":
+                    "image/jpeg",
+
+                ".jpeg":
+                    "image/jpeg",
+
+                ".webp":
+                    "image/webp",
+
+                ".svg":
+                    "image/svg+xml",
+
+            }
+
+            b2_storage.upload_file(
+                new_icon_file_path,
+                b2_icon_key,
+                icon_media_types.get(
+                    icon_ext,
+                    "application/octet-stream",
+                ),
+            )
+
+        # =====================================================
+        # UPDATE DATABASE
+        # =====================================================
 
         app.version = version
 
-        app.file_type = ext
+        # Final stored artifact is APK.
+        app.file_type = ".apk"
 
-        app.file_path = str(
-            new_final_path
-        )
+        app.file_path = b2_app_key
 
         app.size_mb = round(
             final_size_mb,
@@ -2028,10 +2395,10 @@ async def update_app(
                 changelog
             )
 
-        if new_icon_path is not None:
+        if b2_icon_key is not None:
 
             app.icon_path = (
-                new_icon_path
+                b2_icon_key
             )
 
         db.commit()
@@ -2043,6 +2410,18 @@ async def update_app(
     except HTTPException:
 
         db.rollback()
+
+        if b2_app_key:
+
+            b2_storage.delete_file(
+                b2_app_key
+            )
+
+        if b2_icon_key:
+
+            b2_storage.delete_file(
+                b2_icon_key
+            )
 
         safe_remove(
             new_final_path
@@ -2066,6 +2445,18 @@ async def update_app(
     except Exception:
 
         db.rollback()
+
+        if b2_app_key:
+
+            b2_storage.delete_file(
+                b2_app_key
+            )
+
+        if b2_icon_key:
+
+            b2_storage.delete_file(
+                b2_icon_key
+            )
 
         safe_remove(
             new_final_path
@@ -2096,33 +2487,50 @@ async def update_app(
     # =====================================================
 
     if (
-        old_path != new_final_path
-        and old_path.exists()
-        and old_path.is_file()
+        old_storage_path
+        and old_storage_path
+        != app.file_path
     ):
 
-        try:
-
-            old_path.unlink()
-
-        except OSError:
-
-            pass
+        delete_stored_file(
+            old_storage_path
+        )
 
     # =====================================================
     # DELETE OLD ICON
     # =====================================================
 
     if (
-        new_icon_path is not None
+        b2_icon_key is not None
         and old_icon_path
         and old_icon_path
-        != new_icon_path
+        != app.icon_path
     ):
 
-        safe_remove_icon(
+        delete_stored_icon(
             old_icon_path
         )
+
+    # =====================================================
+    # TEMP LOCAL CLEANUP
+    # =====================================================
+
+    safe_remove(
+        new_final_path
+    )
+
+    if (
+        str(original_path)
+        != str(new_final_path)
+    ):
+
+        safe_remove(
+            original_path
+        )
+
+    safe_remove_icon(
+        new_icon_file_path
+    )
 
     return AppUploadResponse(
 
@@ -2145,7 +2553,7 @@ async def update_app(
             2,
         ),
 
-        stored_as=os.path.basename(
+        stored_as=get_storage_name(
             app.file_path
         ),
 
@@ -2217,21 +2625,13 @@ def delete_app(
         db,
     )
 
-    file_path = (
-        ensure_safe_storage_path(
-            app.file_path
-        )
+    stored_file_path = (
+        app.file_path
     )
 
-    icon_path = None
-
-    if app.icon_path:
-
-        icon_path = (
-            ensure_safe_icon_path(
-                app.icon_path
-            )
-        )
+    stored_icon_path = (
+        app.icon_path
+    )
 
     try:
 
@@ -2252,31 +2652,91 @@ def delete_app(
             ),
         )
 
+    # =====================================================
+    # DELETE PACKAGE
+    # =====================================================
+
     file_deleted = False
 
-    if file_path.exists():
+    if stored_file_path:
 
-        try:
+        if is_b2_object(
+            stored_file_path
+        ):
 
-            file_path.unlink()
+            file_deleted = (
+                b2_storage.delete_file(
+                    stored_file_path
+                )
+            )
 
-            file_deleted = True
-
-        except OSError:
-
-            file_deleted = False
-
-    icon_deleted = False
-
-    if icon_path is not None:
-
-        if icon_path.exists():
+        else:
 
             try:
 
-                icon_path.unlink()
+                file_path = (
+                    ensure_safe_storage_path(
+                        stored_file_path
+                    )
+                )
 
-                icon_deleted = True
+                if (
+                    file_path.exists()
+                    and file_path.is_file()
+                ):
+
+                    file_path.unlink()
+
+                    file_deleted = True
+
+            except HTTPException:
+
+                file_deleted = False
+
+            except OSError:
+
+                file_deleted = False
+
+    # =====================================================
+    # DELETE ICON
+    # =====================================================
+
+    icon_deleted = False
+
+    if stored_icon_path:
+
+        if is_b2_object(
+            stored_icon_path
+        ):
+
+            icon_deleted = (
+                b2_storage.delete_file(
+                    stored_icon_path
+                )
+            )
+
+        else:
+
+            try:
+
+                icon_path = (
+                    ensure_safe_icon_path(
+                        stored_icon_path
+                    )
+                )
+
+                if (
+                    icon_path.exists()
+                    and icon_path.is_file()
+                ):
+
+                    icon_path.unlink()
+
+                    icon_deleted = True
+
+            except HTTPException:
+
+                icon_deleted = False
 
             except OSError:
 
@@ -2305,13 +2765,12 @@ def delete_app(
     "/{app_id}/download"
 )
 def download_app(
-
     app_id: int,
-
     db: Session = Depends(get_db),
-
 ):
-
+    # -----------------------------------------------------
+    # FIND APP
+    # -----------------------------------------------------
     app = (
         db.query(App)
         .filter(
@@ -2321,14 +2780,15 @@ def download_app(
     )
 
     if app is None:
-
         raise HTTPException(
             status_code=404,
             detail="App nahi mila",
         )
 
+    # -----------------------------------------------------
+    # CHECK PUBLISHED
+    # -----------------------------------------------------
     if app.status != "published":
-
         raise HTTPException(
             status_code=404,
             detail=(
@@ -2336,30 +2796,119 @@ def download_app(
             ),
         )
 
-    file_path = (
-        ensure_safe_storage_path(
-            app.file_path
-        )
+    # -----------------------------------------------------
+    # STORAGE VARIABLES
+    # -----------------------------------------------------
+    b2_response = None
+    file_path = None
+
+    stored_file_path = (
+        str(app.file_path).strip()
+        if app.file_path
+        else ""
     )
 
-    if not file_path.exists():
-
+    if not stored_file_path:
         raise HTTPException(
             status_code=404,
-            detail=(
-                "App file storage me nahi mili"
-            ),
+            detail="App file path database me nahi hai",
         )
 
-    if not file_path.is_file():
+    print(
+        f"[DOWNLOAD] App ID={app_id}"
+    )
 
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                "App file storage me valid nahi hai"
-            ),
+    print(
+        f"[DOWNLOAD] Stored file path="
+        f"{stored_file_path}"
+    )
+
+    # =====================================================
+    # B2 STORAGE
+    # =====================================================
+    if is_b2_object(
+        stored_file_path
+    ):
+
+        print(
+            f"[DOWNLOAD] Using B2 storage: "
+            f"{stored_file_path}"
         )
 
+        try:
+
+            b2_response = (
+                b2_storage.download_file(
+                    stored_file_path
+                )
+            )
+
+        except Exception as exc:
+
+            print(
+                f"[DOWNLOAD] B2 download failed: "
+                f"{type(exc).__name__}: {exc}"
+            )
+
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    "App file B2 storage me nahi mili"
+                ),
+            )
+
+    # =====================================================
+    # LEGACY LOCAL STORAGE
+    # =====================================================
+    else:
+
+        print(
+            "[DOWNLOAD] Using legacy local storage"
+        )
+
+        try:
+
+            file_path = (
+                ensure_safe_storage_path(
+                    stored_file_path
+                )
+            )
+
+        except HTTPException:
+
+            print(
+                "[DOWNLOAD] Invalid local storage path: "
+                f"{stored_file_path}"
+            )
+
+            raise
+
+        if not file_path.exists():
+
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    "App file storage me nahi mili"
+                ),
+            )
+
+        if not file_path.is_file():
+
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    "App file storage me valid nahi hai"
+                ),
+            )
+
+        print(
+            f"[DOWNLOAD] Local file found: "
+            f"{file_path}"
+        )
+
+    # =====================================================
+    # INCREMENT DOWNLOAD COUNT
+    # =====================================================
     app.download_count = (
         (app.download_count or 0)
         + 1
@@ -2371,11 +2920,28 @@ def download_app(
         app
     )
 
-    download_name = (
-        f"{app.app_name}"
-        f"-{app.version}.apk"
+    # =====================================================
+    # DOWNLOAD FILE NAME
+    # =====================================================
+    app_name = (
+        str(app.app_name).strip()
+        if app.app_name
+        else "app"
     )
 
+    version = (
+        str(app.version).strip()
+        if app.version
+        else "1.0.0"
+    )
+
+    download_name = (
+        f"{app_name}-{version}.apk"
+    )
+
+    # -----------------------------------------------------
+    # WINDOWS / HEADER UNSAFE CHARACTERS
+    # -----------------------------------------------------
     safe_download_name = (
         download_name
         .replace("/", "_")
@@ -2389,6 +2955,55 @@ def download_app(
         .replace("|", "_")
     )
 
+    print(
+        f"[DOWNLOAD] Download filename="
+        f"{safe_download_name}"
+    )
+
+    # =====================================================
+    # RETURN B2 FILE
+    # =====================================================
+    if b2_response is not None:
+
+        headers = {
+            "Content-Disposition": (
+                f'attachment; '
+                f'filename="{safe_download_name}"'
+            )
+        }
+
+        content_length = (
+            b2_response.get(
+                "ContentLength"
+            )
+        )
+
+        if content_length is not None:
+
+            headers[
+                "Content-Length"
+            ] = str(
+                content_length
+            )
+
+        return StreamingResponse(
+
+            b2_response[
+                "Body"
+            ].iter_chunks(
+                chunk_size=1024 * 1024
+            ),
+
+            media_type=(
+                "application/vnd.android.package-archive"
+            ),
+
+            headers=headers,
+        )
+
+    # =====================================================
+    # RETURN LOCAL FILE
+    # =====================================================
     return FileResponse(
 
         path=str(
@@ -2400,6 +3015,5 @@ def download_app(
         ),
 
         filename=safe_download_name,
-
     )
 
