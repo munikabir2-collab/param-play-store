@@ -214,6 +214,10 @@ def is_b2_object(
     if not value:
         return False
 
+    value = str(
+        value
+    ).strip()
+
     return (
         value.startswith("apps/")
         or value.startswith("icons/")
@@ -249,56 +253,364 @@ def get_storage_name(
         return None
 
     return os.path.basename(
-        storage_path
+        str(storage_path)
     )
 
 
+# =========================================================
+# DELETE STORED APP FILE
+# =========================================================
+#
+# Returns:
+#   True  = deleted successfully / already absent
+#   False = deletion failed or invalid path
+#
+# Supports:
+#   1. Backblaze B2 object
+#   2. Legacy local storage file
+#
+# =========================================================
+
 def delete_stored_file(
+    storage_path: str | None,
+) -> bool:
+
+    if not storage_path:
+        return False
+
+    storage_path = str(
+        storage_path
+    ).strip()
+
+    if not storage_path:
+        return False
+
+    # -----------------------------------------------------
+    # B2 OBJECT
+    # -----------------------------------------------------
+
+    if is_b2_object(
+        storage_path
+    ):
+
+        try:
+
+            result = (
+                b2_storage.delete_file(
+                    storage_path
+                )
+            )
+
+            # Some storage implementations return None
+            # on successful deletion.
+            if result is None:
+                return True
+
+            return bool(
+                result
+            )
+
+        except Exception as exc:
+
+            print(
+                f"[B2 DELETE ERROR] "
+                f"Could not delete object "
+                f"{storage_path}: "
+                f"{type(exc).__name__}: {exc}"
+            )
+
+            return False
+
+    # -----------------------------------------------------
+    # LEGACY LOCAL FILE
+    # -----------------------------------------------------
+
+    try:
+
+        path = ensure_safe_storage_path(
+            storage_path
+        )
+
+    except HTTPException as exc:
+
+        print(
+            f"[LOCAL DELETE WARNING] "
+            f"Invalid stored app path: "
+            f"{storage_path} | "
+            f"{exc.detail}"
+        )
+
+        return False
+
+    # Already absent = cleanup completed.
+    if not path.exists():
+        return True
+
+    if not path.is_file():
+
+        print(
+            f"[LOCAL DELETE WARNING] "
+            f"Stored app path is not a file: "
+            f"{path}"
+        )
+
+        return False
+
+    try:
+
+        path.unlink()
+
+        return not path.exists()
+
+    except OSError as exc:
+
+        print(
+            f"[LOCAL DELETE ERROR] "
+            f"Could not delete local app file "
+            f"{path}: "
+            f"{type(exc).__name__}: {exc}"
+        )
+
+        return False
+
+
+# =========================================================
+# DELETE STORED ICON
+# =========================================================
+#
+# Returns:
+#   True  = deleted successfully / already absent
+#   False = deletion failed or invalid path
+#
+# =========================================================
+
+def delete_stored_icon(
+    icon_path: str | None,
+) -> bool:
+
+    if not icon_path:
+        return False
+
+    icon_path = str(
+        icon_path
+    ).strip()
+
+    if not icon_path:
+        return False
+
+    # -----------------------------------------------------
+    # B2 OBJECT
+    # -----------------------------------------------------
+
+    if is_b2_object(
+        icon_path
+    ):
+
+        try:
+
+            result = (
+                b2_storage.delete_file(
+                    icon_path
+                )
+            )
+
+            if result is None:
+                return True
+
+            return bool(
+                result
+            )
+
+        except Exception as exc:
+
+            print(
+                f"[B2 ICON DELETE ERROR] "
+                f"Could not delete icon "
+                f"{icon_path}: "
+                f"{type(exc).__name__}: {exc}"
+            )
+
+            return False
+
+    # -----------------------------------------------------
+    # LEGACY LOCAL ICON
+    # -----------------------------------------------------
+
+    try:
+
+        path = ensure_safe_icon_path(
+            icon_path
+        )
+
+    except HTTPException as exc:
+
+        print(
+            f"[LOCAL ICON DELETE WARNING] "
+            f"Invalid stored icon path: "
+            f"{icon_path} | "
+            f"{exc.detail}"
+        )
+
+        return False
+
+    if not path.exists():
+        return True
+
+    if not path.is_file():
+
+        print(
+            f"[LOCAL ICON DELETE WARNING] "
+            f"Stored icon path is not a file: "
+            f"{path}"
+        )
+
+        return False
+
+    try:
+
+        path.unlink()
+
+        return not path.exists()
+
+    except OSError as exc:
+
+        print(
+            f"[LOCAL ICON DELETE ERROR] "
+            f"Could not delete local icon "
+            f"{path}: "
+            f"{type(exc).__name__}: {exc}"
+        )
+
+        return False
+
+
+# =========================================================
+# B2 SAFE CLEANUP
+# =========================================================
+#
+# IMPORTANT:
+#
+# This helper is ONLY for newly-created B2 objects which have
+# NOT yet been committed into the database.
+#
+# If DB commit has already succeeded, this function MUST NOT
+# be called for the current/new object.
+#
+# =========================================================
+
+def cleanup_new_b2_object(
     storage_path: str | None,
 ) -> None:
 
     if not storage_path:
         return
 
-    if is_b2_object(
+    storage_path = str(
+        storage_path
+    ).strip()
+
+    if not storage_path:
+        return
+
+    if not is_b2_object(
         storage_path
     ):
+        return
 
-        b2_storage.delete_file(
-            storage_path
+    try:
+
+        result = (
+            b2_storage.delete_file(
+                storage_path
+            )
         )
 
-        return
-
-    safe_remove(
-        storage_path
-    )
-
-
-def delete_stored_icon(
-    icon_path: str | None,
-) -> None:
-
-    if not icon_path:
-        return
-
-    if is_b2_object(
-        icon_path
-    ):
-
-        b2_storage.delete_file(
-            icon_path
+        print(
+            f"[B2 CLEANUP] "
+            f"Deleted temporary object: "
+            f"{storage_path} "
+            f"result={result}"
         )
 
-        return
+    except Exception as exc:
 
-    safe_remove_icon(
-        icon_path
-    )
+        print(
+            f"[B2 CLEANUP WARNING] "
+            f"Could not delete temporary object "
+            f"{storage_path}: "
+            f"{type(exc).__name__}: {exc}"
+        )
 
 
 # =========================================================
-# SAFE FILE DELETE
+# SAFE OLD STORAGE DELETE
+# =========================================================
+#
+# Used AFTER DB commit.
+#
+# If old object cannot be deleted, the new DB reference remains
+# valid. Old object becomes an orphan and can be cleaned later.
+#
+# =========================================================
+
+def safe_delete_old_storage(
+    storage_path: str | None,
+    storage_type: str = "file",
+) -> bool:
+
+    if not storage_path:
+        return False
+
+    try:
+
+        if storage_type == "icon":
+
+            deleted = (
+                delete_stored_icon(
+                    storage_path
+                )
+            )
+
+        else:
+
+            deleted = (
+                delete_stored_file(
+                    storage_path
+                )
+            )
+
+        if deleted:
+
+            print(
+                f"[OLD STORAGE DELETE] "
+                f"Deleted old {storage_type}: "
+                f"{storage_path}"
+            )
+
+        else:
+
+            print(
+                f"[OLD STORAGE DELETE WARNING] "
+                f"Old {storage_type} was not deleted: "
+                f"{storage_path}"
+            )
+
+        return deleted
+
+    except Exception as exc:
+
+        print(
+            f"[OLD STORAGE DELETE WARNING] "
+            f"Could not delete old {storage_type}: "
+            f"{storage_path} | "
+            f"{type(exc).__name__}: {exc}"
+        )
+
+        return False
+
+
+# =========================================================
+# SAFE LOCAL FILE DELETE
 # =========================================================
 
 def safe_remove(
@@ -973,6 +1285,10 @@ async def upload_app(
 
 ):
 
+    # =====================================================
+    # AUTHORIZATION
+    # =====================================================
+
     if current_user is None:
 
         raise HTTPException(
@@ -1000,6 +1316,10 @@ async def upload_app(
                 "account activate karein."
             ),
         )
+
+    # =====================================================
+    # INPUT CLEANING
+    # =====================================================
 
     app_name = clean_app_name(
         app_name
@@ -1029,6 +1349,10 @@ async def upload_app(
         file.filename
     )
 
+    # =====================================================
+    # LOCAL TEMP PATHS
+    # =====================================================
+
     upload_root = get_upload_root()
 
     upload_root.mkdir(
@@ -1049,6 +1373,13 @@ async def upload_app(
 
     b2_icon_key = None
 
+    # DB transaction state
+    db_committed = False
+
+    # =====================================================
+    # ICON TEMP PATH
+    # =====================================================
+
     if icon is not None:
 
         icon_ext = get_icon_extension(
@@ -1062,9 +1393,9 @@ async def upload_app(
 
     try:
 
-        # =====================================================
+        # =================================================
         # SAVE TEMP PACKAGE LOCALLY
-        # =====================================================
+        # =================================================
 
         uploaded_bytes = (
             await save_upload_stream(
@@ -1080,9 +1411,9 @@ async def upload_app(
                 detail="Uploaded file empty hai",
             )
 
-        # =====================================================
+        # =================================================
         # VALIDATE ORIGINAL PACKAGE
-        # =====================================================
+        # =================================================
 
         try:
 
@@ -1098,9 +1429,9 @@ async def upload_app(
                 detail=str(exc),
             )
 
-        # =====================================================
+        # =================================================
         # AAB -> APK
-        # =====================================================
+        # =================================================
 
         if ext == ".aab":
 
@@ -1158,9 +1489,9 @@ async def upload_app(
                 original_path
             )
 
-        # =====================================================
+        # =================================================
         # FINAL LOCAL APK VALIDATION
-        # =====================================================
+        # =================================================
 
         final_path = (
             ensure_safe_storage_path(
@@ -1209,9 +1540,9 @@ async def upload_app(
             / (1024 * 1024)
         )
 
-        # =====================================================
+        # =================================================
         # SAVE TEMP ICON
-        # =====================================================
+        # =================================================
 
         if icon is not None:
 
@@ -1235,13 +1566,22 @@ async def upload_app(
                 icon_file_path
             )
 
-        # =====================================================
-        # UPLOAD APK TO B2
-        # =====================================================
+        # =================================================
+        # GENERATE B2 APK KEY
+        # =================================================
 
         b2_app_key = get_b2_app_key(
             current_user.id
         )
+
+        print(
+            f"[B2 UPLOAD] APK key: "
+            f"{b2_app_key}"
+        )
+
+        # =================================================
+        # UPLOAD APK TO B2
+        # =================================================
 
         b2_storage.upload_file(
             final_path,
@@ -1249,9 +1589,14 @@ async def upload_app(
             "application/vnd.android.package-archive",
         )
 
-        # =====================================================
+        print(
+            f"[B2 UPLOAD] APK upload successful: "
+            f"{b2_app_key}"
+        )
+
+        # =================================================
         # UPLOAD ICON TO B2
-        # =====================================================
+        # =================================================
 
         if icon_file_path is not None:
 
@@ -1294,9 +1639,14 @@ async def upload_app(
                 ),
             )
 
-        # =====================================================
-        # DATABASE
-        # =====================================================
+            print(
+                f"[B2 UPLOAD] Icon upload successful: "
+                f"{b2_icon_key}"
+            )
+
+        # =================================================
+        # CREATE DATABASE OBJECT
+        # =================================================
 
         new_app = App(
 
@@ -1308,10 +1658,8 @@ async def upload_app(
 
             version=version,
 
-            # AAB is converted into APK.
             file_type=".apk",
 
-            # B2 object key is stored in DB.
             file_path=b2_app_key,
 
             size_mb=round(
@@ -1333,27 +1681,156 @@ async def upload_app(
             new_app
         )
 
+        # =================================================
+        # DATABASE COMMIT
+        # =================================================
+
         db.commit()
 
-        db.refresh(
-            new_app
+        # IMPORTANT:
+        #
+        # From this exact point the B2 objects are referenced
+        # by a committed database row.
+        #
+        # Therefore later errors MUST NOT delete the new
+        # B2 objects.
+        #
+        db_committed = True
+
+        print(
+            f"[APP UPLOAD] DB commit successful. "
+            f"App ID={new_app.id}"
+        )
+
+        # =================================================
+        # REFRESH AFTER COMMIT
+        # =================================================
+
+        try:
+
+            db.refresh(
+                new_app
+            )
+
+        except Exception as refresh_error:
+
+            print(
+                f"[APP UPLOAD WARNING] "
+                f"DB refresh failed after commit: "
+                f"{type(refresh_error).__name__}: "
+                f"{refresh_error}"
+            )
+
+        # =================================================
+        # TEMP LOCAL CLEANUP
+        # =================================================
+
+        safe_remove(
+            final_path
+        )
+
+        if (
+            str(original_path)
+            != str(final_path)
+        ):
+
+            safe_remove(
+                original_path
+            )
+
+        safe_remove_icon(
+            icon_file_path
+        )
+
+        # =================================================
+        # RESPONSE
+        # =================================================
+
+        return AppUploadResponse(
+
+            message=(
+                "App upload ho gaya aur Backblaze B2 "
+                "storage mein save ho gaya"
+            ),
+
+            app_name=new_app.app_name,
+
+            package_name=new_app.package_name,
+
+            version=new_app.version,
+
+            file_type=new_app.file_type,
+
+            size_mb=round(
+                new_app.size_mb or 0,
+                2,
+            ),
+
+            stored_as=get_storage_name(
+                new_app.file_path
+            ),
+
+            icon_path=new_app.icon_path,
+
+            icon_url=get_icon_url(
+                new_app.id,
+                new_app.icon_path,
+            ),
+
+            changelog=new_app.changelog or "",
+
+            status=new_app.status,
+
         )
 
     except HTTPException:
 
-        db.rollback()
+        # =================================================
+        # BEFORE DB COMMIT
+        # =================================================
 
-        if b2_app_key:
+        if not db_committed:
 
-            b2_storage.delete_file(
+            try:
+
+                db.rollback()
+
+            except Exception:
+
+                pass
+
+            # Only NEW/uncommitted B2 objects are deleted.
+            cleanup_new_b2_object(
                 b2_app_key
             )
 
-        if b2_icon_key:
-
-            b2_storage.delete_file(
+            cleanup_new_b2_object(
                 b2_icon_key
             )
+
+        # =================================================
+        # AFTER DB COMMIT
+        # =================================================
+
+        else:
+
+            try:
+
+                db.rollback()
+
+            except Exception:
+
+                pass
+
+            print(
+                "[APP UPLOAD WARNING] "
+                "DB already committed. "
+                "New B2 objects preserved."
+            )
+
+        # =================================================
+        # LOCAL TEMP CLEANUP
+        # =================================================
 
         safe_remove(
             final_path
@@ -1374,21 +1851,58 @@ async def upload_app(
 
         raise
 
-    except Exception:
+    except Exception as exc:
 
-        db.rollback()
+        print(
+            f"[APP UPLOAD ERROR] "
+            f"{type(exc).__name__}: {exc}"
+        )
 
-        if b2_app_key:
+        # =================================================
+        # BEFORE DB COMMIT
+        # =================================================
 
-            b2_storage.delete_file(
+        if not db_committed:
+
+            try:
+
+                db.rollback()
+
+            except Exception:
+
+                pass
+
+            cleanup_new_b2_object(
                 b2_app_key
             )
 
-        if b2_icon_key:
-
-            b2_storage.delete_file(
+            cleanup_new_b2_object(
                 b2_icon_key
             )
+
+        # =================================================
+        # AFTER DB COMMIT
+        # =================================================
+
+        else:
+
+            try:
+
+                db.rollback()
+
+            except Exception:
+
+                pass
+
+            print(
+                "[APP UPLOAD WARNING] "
+                "DB already committed. "
+                "New B2 objects intentionally preserved."
+            )
+
+        # =================================================
+        # LOCAL TEMP CLEANUP
+        # =================================================
 
         safe_remove(
             final_path
@@ -1407,70 +1921,23 @@ async def upload_app(
             icon_file_path
         )
 
+        if db_committed:
+
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "App database aur B2 mein save ho gaya hai, "
+                    "lekin final response complete nahi ho paya. "
+                    "Retry karne se pehle app verify karein."
+                ),
+            )
+
         raise HTTPException(
             status_code=500,
             detail=(
                 "App upload process complete nahi ho paya"
             ),
         )
-
-    # =====================================================
-    # TEMP LOCAL FILE CLEANUP
-    # =====================================================
-
-    safe_remove(
-        final_path
-    )
-
-    if (
-        str(original_path)
-        != str(final_path)
-    ):
-
-        safe_remove(
-            original_path
-        )
-
-    safe_remove_icon(
-        icon_file_path
-    )
-
-    return AppUploadResponse(
-
-        message=(
-            "App upload ho gaya aur Backblaze B2 "
-            "storage mein save ho gaya"
-        ),
-
-        app_name=new_app.app_name,
-
-        package_name=new_app.package_name,
-
-        version=new_app.version,
-
-        file_type=new_app.file_type,
-
-        size_mb=round(
-            new_app.size_mb or 0,
-            2,
-        ),
-
-        stored_as=get_storage_name(
-            new_app.file_path
-        ),
-
-        icon_path=new_app.icon_path,
-
-        icon_url=get_icon_url(
-            new_app.id,
-            new_app.icon_path,
-        ),
-
-        changelog=new_app.changelog or "",
-
-        status=new_app.status,
-
-    )
 
 
 # =========================================================
@@ -1760,7 +2227,7 @@ def get_app_icon(
     }
 
     extension = os.path.splitext(
-        app.icon_path
+        str(app.icon_path)
     )[1].lower()
 
     media_type = media_types.get(
@@ -1780,11 +2247,16 @@ def get_app_icon(
 
             response = (
                 b2_storage.download_file(
-                    app.icon_path
+                    str(app.icon_path).strip()
                 )
             )
 
-        except Exception:
+        except Exception as exc:
+
+            print(
+                f"[ICON] B2 download failed: "
+                f"{type(exc).__name__}: {exc}"
+            )
 
             raise HTTPException(
                 status_code=404,
@@ -2013,6 +2485,10 @@ async def update_app(
 
 ):
 
+    # =====================================================
+    # AUTHORIZATION
+    # =====================================================
+
     if current_user is None:
 
         raise HTTPException(
@@ -2038,11 +2514,36 @@ async def update_app(
             ),
         )
 
+    # =====================================================
+    # FIND APP + OWNER CHECK
+    # =====================================================
+
     app = get_app_for_owner(
         app_id,
         current_user,
         db,
     )
+
+    # =====================================================
+    # SAVE OLD STORAGE REFERENCES
+    # =====================================================
+    #
+    # These values MUST remain unchanged until the new DB
+    # transaction has successfully committed.
+    #
+    # =====================================================
+
+    old_storage_path = (
+        app.file_path
+    )
+
+    old_icon_path = (
+        app.icon_path
+    )
+
+    # =====================================================
+    # CLEAN INPUT
+    # =====================================================
 
     version = clean_version(
         version
@@ -2080,6 +2581,10 @@ async def update_app(
         file.filename
     )
 
+    # =====================================================
+    # LOCAL TEMP PATHS
+    # =====================================================
+
     upload_root = get_upload_root()
 
     upload_root.mkdir(
@@ -2094,19 +2599,25 @@ async def update_app(
 
     new_final_path = original_path
 
-    old_storage_path = (
-        app.file_path
-    )
-
-    old_icon_path = (
-        app.icon_path
-    )
-
     new_icon_file_path = None
+
+    # =====================================================
+    # NEW B2 KEYS
+    # =====================================================
 
     b2_app_key = None
 
     b2_icon_key = None
+
+    # =====================================================
+    # DB STATE
+    # =====================================================
+
+    db_committed = False
+
+    # =====================================================
+    # NEW ICON TEMP PATH
+    # =====================================================
 
     if icon is not None:
 
@@ -2123,9 +2634,9 @@ async def update_app(
 
     try:
 
-        # =====================================================
+        # =================================================
         # SAVE NEW PACKAGE LOCALLY
-        # =====================================================
+        # =================================================
 
         uploaded_bytes = (
             await save_upload_stream(
@@ -2143,9 +2654,9 @@ async def update_app(
                 ),
             )
 
-        # =====================================================
+        # =================================================
         # VALIDATE PACKAGE
-        # =====================================================
+        # =================================================
 
         try:
 
@@ -2161,9 +2672,9 @@ async def update_app(
                 detail=str(exc),
             )
 
-        # =====================================================
+        # =================================================
         # AAB -> APK
-        # =====================================================
+        # =================================================
 
         if ext == ".aab":
 
@@ -2221,9 +2732,9 @@ async def update_app(
                 original_path
             )
 
-        # =====================================================
+        # =================================================
         # FINAL PACKAGE VALIDATION
-        # =====================================================
+        # =================================================
 
         new_final_path = (
             ensure_safe_storage_path(
@@ -2272,9 +2783,9 @@ async def update_app(
             / (1024 * 1024)
         )
 
-        # =====================================================
-        # NEW ICON LOCAL TEMP FILE
-        # =====================================================
+        # =================================================
+        # SAVE NEW ICON LOCALLY
+        # =================================================
 
         if icon is not None:
 
@@ -2298,13 +2809,22 @@ async def update_app(
                 new_icon_file_path
             )
 
-        # =====================================================
-        # UPLOAD NEW APK TO B2
-        # =====================================================
+        # =================================================
+        # GENERATE NEW B2 APK KEY
+        # =================================================
 
         b2_app_key = get_b2_app_key(
             current_user.id
         )
+
+        print(
+            f"[B2 UPDATE] New APK key: "
+            f"{b2_app_key}"
+        )
+
+        # =================================================
+        # UPLOAD NEW APK TO B2
+        # =================================================
 
         b2_storage.upload_file(
             new_final_path,
@@ -2312,9 +2832,14 @@ async def update_app(
             "application/vnd.android.package-archive",
         )
 
-        # =====================================================
+        print(
+            f"[B2 UPDATE] New APK upload successful: "
+            f"{b2_app_key}"
+        )
+
+        # =================================================
         # UPLOAD NEW ICON TO B2
-        # =====================================================
+        # =================================================
 
         if new_icon_file_path is not None:
 
@@ -2357,13 +2882,17 @@ async def update_app(
                 ),
             )
 
-        # =====================================================
-        # UPDATE DATABASE
-        # =====================================================
+            print(
+                f"[B2 UPDATE] New icon upload successful: "
+                f"{b2_icon_key}"
+            )
+
+        # =================================================
+        # UPDATE DATABASE OBJECT
+        # =================================================
 
         app.version = version
 
-        # Final stored artifact is APK.
         app.file_type = ".apk"
 
         app.file_path = b2_app_key
@@ -2387,7 +2916,9 @@ async def update_app(
 
         if category is not None:
 
-            app.category = category
+            app.category = (
+                category
+            )
 
         if changelog is not None:
 
@@ -2395,33 +2926,205 @@ async def update_app(
                 changelog
             )
 
+        # If no new icon was uploaded,
+        # the old icon remains active.
         if b2_icon_key is not None:
 
             app.icon_path = (
                 b2_icon_key
             )
 
+        # =================================================
+        # DATABASE COMMIT
+        # =================================================
+
         db.commit()
 
-        db.refresh(
-            app
+        # CRITICAL:
+        #
+        # New B2 object is now referenced by committed DB row.
+        #
+        db_committed = True
+
+        print(
+            f"[APP UPDATE] DB commit successful. "
+            f"App ID={app.id}"
+        )
+
+        # =================================================
+        # REFRESH AFTER COMMIT
+        # =================================================
+
+        try:
+
+            db.refresh(
+                app
+            )
+
+        except Exception as refresh_error:
+
+            print(
+                f"[APP UPDATE WARNING] "
+                f"DB refresh failed after commit: "
+                f"{type(refresh_error).__name__}: "
+                f"{refresh_error}"
+            )
+
+        # =================================================
+        # DELETE OLD PACKAGE
+        # =================================================
+        #
+        # ONLY after the new DB reference has committed.
+        #
+        # If deletion fails:
+        #   - DB remains valid
+        #   - new B2 object remains valid
+        #   - old object may become orphaned
+        #
+        # =================================================
+
+        if (
+            old_storage_path
+            and old_storage_path
+            != app.file_path
+        ):
+
+            safe_delete_old_storage(
+                old_storage_path,
+                "package",
+            )
+
+        # =================================================
+        # DELETE OLD ICON
+        # =================================================
+
+        if (
+            b2_icon_key is not None
+            and old_icon_path
+            and old_icon_path
+            != app.icon_path
+        ):
+
+            safe_delete_old_storage(
+                old_icon_path,
+                "icon",
+            )
+
+        # =================================================
+        # TEMP LOCAL CLEANUP
+        # =================================================
+
+        safe_remove(
+            new_final_path
+        )
+
+        if (
+            str(original_path)
+            != str(new_final_path)
+        ):
+
+            safe_remove(
+                original_path
+            )
+
+        safe_remove_icon(
+            new_icon_file_path
+        )
+
+        # =================================================
+        # RESPONSE
+        # =================================================
+
+        return AppUploadResponse(
+
+            message=(
+                "App successfully update ho gaya"
+            ),
+
+            app_name=app.app_name,
+
+            package_name=(
+                app.package_name
+            ),
+
+            version=app.version,
+
+            file_type=app.file_type,
+
+            size_mb=round(
+                app.size_mb or 0,
+                2,
+            ),
+
+            stored_as=get_storage_name(
+                app.file_path
+            ),
+
+            icon_path=app.icon_path,
+
+            icon_url=get_icon_url(
+                app.id,
+                app.icon_path,
+            ),
+
+            changelog=(
+                app.changelog or ""
+            ),
+
+            status=(
+                app.status
+            ),
+
         )
 
     except HTTPException:
 
-        db.rollback()
+        # =================================================
+        # BEFORE DB COMMIT
+        # =================================================
 
-        if b2_app_key:
+        if not db_committed:
 
-            b2_storage.delete_file(
+            try:
+
+                db.rollback()
+
+            except Exception:
+
+                pass
+
+            # ONLY new B2 objects are deleted.
+            cleanup_new_b2_object(
                 b2_app_key
             )
 
-        if b2_icon_key:
-
-            b2_storage.delete_file(
+            cleanup_new_b2_object(
                 b2_icon_key
             )
+
+        # =================================================
+        # AFTER DB COMMIT
+        # =================================================
+
+        else:
+
+            try:
+
+                db.rollback()
+
+            except Exception:
+
+                pass
+
+            print(
+                "[B2 UPDATE WARNING] "
+                "DB already committed. "
+                "New B2 objects preserved."
+            )
+
+        # =================================================
+        # TEMP LOCAL CLEANUP
+        # =================================================
 
         safe_remove(
             new_final_path
@@ -2442,21 +3145,58 @@ async def update_app(
 
         raise
 
-    except Exception:
+    except Exception as exc:
 
-        db.rollback()
+        print(
+            f"[APP UPDATE ERROR] "
+            f"{type(exc).__name__}: {exc}"
+        )
 
-        if b2_app_key:
+        # =================================================
+        # BEFORE DB COMMIT
+        # =================================================
 
-            b2_storage.delete_file(
+        if not db_committed:
+
+            try:
+
+                db.rollback()
+
+            except Exception:
+
+                pass
+
+            cleanup_new_b2_object(
                 b2_app_key
             )
 
-        if b2_icon_key:
-
-            b2_storage.delete_file(
+            cleanup_new_b2_object(
                 b2_icon_key
             )
+
+        # =================================================
+        # AFTER DB COMMIT
+        # =================================================
+
+        else:
+
+            try:
+
+                db.rollback()
+
+            except Exception:
+
+                pass
+
+            print(
+                "[APP UPDATE WARNING] "
+                "DB already committed. "
+                "New B2 objects intentionally preserved."
+            )
+
+        # =================================================
+        # TEMP LOCAL CLEANUP
+        # =================================================
 
         safe_remove(
             new_final_path
@@ -2475,104 +3215,24 @@ async def update_app(
             new_icon_file_path
         )
 
+        if db_committed:
+
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "App update database aur B2 mein "
+                    "successfully commit ho gaya hai, "
+                    "lekin final response complete nahi ho paya. "
+                    "Retry karne se pehle app verify karein."
+                ),
+            )
+
         raise HTTPException(
             status_code=500,
             detail=(
                 "App update process complete nahi ho paya"
             ),
         )
-
-    # =====================================================
-    # DELETE OLD PACKAGE
-    # =====================================================
-
-    if (
-        old_storage_path
-        and old_storage_path
-        != app.file_path
-    ):
-
-        delete_stored_file(
-            old_storage_path
-        )
-
-    # =====================================================
-    # DELETE OLD ICON
-    # =====================================================
-
-    if (
-        b2_icon_key is not None
-        and old_icon_path
-        and old_icon_path
-        != app.icon_path
-    ):
-
-        delete_stored_icon(
-            old_icon_path
-        )
-
-    # =====================================================
-    # TEMP LOCAL CLEANUP
-    # =====================================================
-
-    safe_remove(
-        new_final_path
-    )
-
-    if (
-        str(original_path)
-        != str(new_final_path)
-    ):
-
-        safe_remove(
-            original_path
-        )
-
-    safe_remove_icon(
-        new_icon_file_path
-    )
-
-    return AppUploadResponse(
-
-        message=(
-            "App successfully update ho gaya"
-        ),
-
-        app_name=app.app_name,
-
-        package_name=(
-            app.package_name
-        ),
-
-        version=app.version,
-
-        file_type=app.file_type,
-
-        size_mb=round(
-            app.size_mb or 0,
-            2,
-        ),
-
-        stored_as=get_storage_name(
-            app.file_path
-        ),
-
-        icon_path=app.icon_path,
-
-        icon_url=get_icon_url(
-            app.id,
-            app.icon_path,
-        ),
-
-        changelog=(
-            app.changelog or ""
-        ),
-
-        status=(
-            app.status
-        ),
-
-    )
 
 
 # =========================================================
@@ -2593,6 +3253,10 @@ def delete_app(
     ),
 
 ):
+
+    # =====================================================
+    # AUTHORIZATION
+    # =====================================================
 
     if current_user is None:
 
@@ -2633,6 +3297,10 @@ def delete_app(
         app.icon_path
     )
 
+    # =====================================================
+    # DELETE DATABASE ROW
+    # =====================================================
+
     try:
 
         db.delete(
@@ -2653,94 +3321,38 @@ def delete_app(
         )
 
     # =====================================================
-    # DELETE PACKAGE
+    # DELETE PACKAGE FROM STORAGE
     # =====================================================
 
     file_deleted = False
 
     if stored_file_path:
 
-        if is_b2_object(
-            stored_file_path
-        ):
-
-            file_deleted = (
-                b2_storage.delete_file(
-                    stored_file_path
-                )
+        file_deleted = (
+            safe_delete_old_storage(
+                stored_file_path,
+                "package",
             )
-
-        else:
-
-            try:
-
-                file_path = (
-                    ensure_safe_storage_path(
-                        stored_file_path
-                    )
-                )
-
-                if (
-                    file_path.exists()
-                    and file_path.is_file()
-                ):
-
-                    file_path.unlink()
-
-                    file_deleted = True
-
-            except HTTPException:
-
-                file_deleted = False
-
-            except OSError:
-
-                file_deleted = False
+        )
 
     # =====================================================
-    # DELETE ICON
+    # DELETE ICON FROM STORAGE
     # =====================================================
 
     icon_deleted = False
 
     if stored_icon_path:
 
-        if is_b2_object(
-            stored_icon_path
-        ):
-
-            icon_deleted = (
-                b2_storage.delete_file(
-                    stored_icon_path
-                )
+        icon_deleted = (
+            safe_delete_old_storage(
+                stored_icon_path,
+                "icon",
             )
+        )
 
-        else:
-
-            try:
-
-                icon_path = (
-                    ensure_safe_icon_path(
-                        stored_icon_path
-                    )
-                )
-
-                if (
-                    icon_path.exists()
-                    and icon_path.is_file()
-                ):
-
-                    icon_path.unlink()
-
-                    icon_deleted = True
-
-            except HTTPException:
-
-                icon_deleted = False
-
-            except OSError:
-
-                icon_deleted = False
+    # =====================================================
+    # RESPONSE
+    # =====================================================
 
     return {
 
@@ -2765,12 +3377,17 @@ def delete_app(
     "/{app_id}/download"
 )
 def download_app(
+
     app_id: int,
+
     db: Session = Depends(get_db),
+
 ):
-    # -----------------------------------------------------
+
+    # =====================================================
     # FIND APP
-    # -----------------------------------------------------
+    # =====================================================
+
     app = (
         db.query(App)
         .filter(
@@ -2780,15 +3397,18 @@ def download_app(
     )
 
     if app is None:
+
         raise HTTPException(
             status_code=404,
             detail="App nahi mila",
         )
 
-    # -----------------------------------------------------
+    # =====================================================
     # CHECK PUBLISHED
-    # -----------------------------------------------------
+    # =====================================================
+
     if app.status != "published":
+
         raise HTTPException(
             status_code=404,
             detail=(
@@ -2796,10 +3416,12 @@ def download_app(
             ),
         )
 
-    # -----------------------------------------------------
+    # =====================================================
     # STORAGE VARIABLES
-    # -----------------------------------------------------
+    # =====================================================
+
     b2_response = None
+
     file_path = None
 
     stored_file_path = (
@@ -2809,9 +3431,12 @@ def download_app(
     )
 
     if not stored_file_path:
+
         raise HTTPException(
             status_code=404,
-            detail="App file path database me nahi hai",
+            detail=(
+                "App file path database me nahi hai"
+            ),
         )
 
     print(
@@ -2826,6 +3451,7 @@ def download_app(
     # =====================================================
     # B2 STORAGE
     # =====================================================
+
     if is_b2_object(
         stored_file_path
     ):
@@ -2860,6 +3486,7 @@ def download_app(
     # =====================================================
     # LEGACY LOCAL STORAGE
     # =====================================================
+
     else:
 
         print(
@@ -2907,22 +3534,14 @@ def download_app(
         )
 
     # =====================================================
-    # INCREMENT DOWNLOAD COUNT
+    # CAPTURE DOWNLOAD METADATA BEFORE DB COUNTER UPDATE
     # =====================================================
-    app.download_count = (
-        (app.download_count or 0)
-        + 1
-    )
-
-    db.commit()
-
-    db.refresh(
-        app
-    )
-
+    #
+    # This prevents the response metadata from depending on
+    # an expired ORM object if download_count commit fails.
+    #
     # =====================================================
-    # DOWNLOAD FILE NAME
-    # =====================================================
+
     app_name = (
         str(app.app_name).strip()
         if app.app_name
@@ -2939,9 +3558,10 @@ def download_app(
         f"{app_name}-{version}.apk"
     )
 
-    # -----------------------------------------------------
+    # =====================================================
     # WINDOWS / HEADER UNSAFE CHARACTERS
-    # -----------------------------------------------------
+    # =====================================================
+
     safe_download_name = (
         download_name
         .replace("/", "_")
@@ -2961,15 +3581,65 @@ def download_app(
     )
 
     # =====================================================
+    # INCREMENT DOWNLOAD COUNT
+    # =====================================================
+
+    app.download_count = (
+        (app.download_count or 0)
+        + 1
+    )
+
+    try:
+
+        db.commit()
+
+        try:
+
+            db.refresh(
+                app
+            )
+
+        except Exception as refresh_exc:
+
+            print(
+                f"[DOWNLOAD WARNING] "
+                f"Could not refresh download counter: "
+                f"{type(refresh_exc).__name__}: "
+                f"{refresh_exc}"
+            )
+
+    except Exception as exc:
+
+        # The file has already been located/opened.
+        # Do not break the actual download because a counter
+        # update failed.
+        print(
+            f"[DOWNLOAD WARNING] "
+            f"Could not update download_count: "
+            f"{type(exc).__name__}: {exc}"
+        )
+
+        try:
+
+            db.rollback()
+
+        except Exception:
+
+            pass
+
+    # =====================================================
     # RETURN B2 FILE
     # =====================================================
+
     if b2_response is not None:
 
         headers = {
+
             "Content-Disposition": (
                 f'attachment; '
                 f'filename="{safe_download_name}"'
             )
+
         }
 
         content_length = (
@@ -2999,11 +3669,13 @@ def download_app(
             ),
 
             headers=headers,
+
         )
 
     # =====================================================
     # RETURN LOCAL FILE
     # =====================================================
+
     return FileResponse(
 
         path=str(
@@ -3015,5 +3687,5 @@ def download_app(
         ),
 
         filename=safe_download_name,
-    )
 
+    )
