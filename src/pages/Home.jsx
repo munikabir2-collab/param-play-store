@@ -411,9 +411,40 @@ function Home() {
 
       <footer className="footer">
 
-        <span>
+        <div className="footer-brand">
           🇮🇳 PARAM Play Store
-        </span>
+        </div>
+
+        <nav
+          className="footer-links"
+          aria-label="Legal and information links"
+        >
+
+          <Link to="/about">
+            About Us
+          </Link>
+
+          <Link to="/pricing">
+            Pricing Details
+          </Link>
+
+          <Link to="/contact">
+            Contact Us
+          </Link>
+
+          <Link to="/terms">
+            Terms & Conditions
+          </Link>
+
+          <Link to="/privacy">
+            Privacy Policy
+          </Link>
+
+          <Link to="/refund-policy">
+            Cancellation / Refund Policy
+          </Link>
+
+        </nav>
 
       </footer>
 
