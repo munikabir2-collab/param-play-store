@@ -28,6 +28,7 @@ Base.metadata.create_all(bind=engine)
 
 from app.api import payments as payments_router
 from app.api import apps as apps_router
+from app.api import b2_migration as b2_migration_router
 from app.api import auth as auth_router
 from app.api import developers as developers_router
 
@@ -59,6 +60,7 @@ app.add_middleware(
 
 app.include_router(auth_router.router)
 app.include_router(apps_router.router)
+app.include_router(b2_migration_router.router)
 app.include_router(developers_router.router)
 app.include_router(payments_router.router)
 
