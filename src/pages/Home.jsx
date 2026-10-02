@@ -1,4 +1,5 @@
-﻿import { useEffect, useState } from "react";
+﻿
+import { useEffect, useState } from "react";
 
 import {
   getApps,
@@ -61,6 +62,12 @@ function Home() {
   };
 
 
+  // Production / Local backend URL
+  const API_URL =
+    import.meta.env.VITE_API_URL ||
+    "http://127.0.0.1:8000";
+
+
   const getIconUrl = (app) => {
     if (!app?.icon_url) {
       return null;
@@ -73,7 +80,7 @@ function Home() {
       return app.icon_url;
     }
 
-    return `http://127.0.0.1:8000${app.icon_url}`;
+    return `${API_URL}${app.icon_url}`;
   };
 
 
@@ -454,3 +461,4 @@ function Home() {
 
 
 export default Home;
+
