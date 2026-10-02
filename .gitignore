@@ -5,3 +5,18 @@ dist/
 !.env.example
 *.log
 .vite/
+# Local backup files
+*.backup
+*.bak
+*.bak-*
+
+# Local APK test artifacts
+backend/*.apk
+
+# Local migration/check scripts
+backend/check_migrated_hash.py
+backend/check_password_format.py
+backend/check_user_info.py
+backend/check_users_columns.py
+backend/migrate_users_schema.py
+backend/test_password.py
