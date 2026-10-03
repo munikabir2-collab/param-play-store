@@ -1,4 +1,4 @@
-import os
+﻿import os
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -313,3 +313,4 @@ def file_exists(object_key: str) -> bool:
     except (BotoCoreError, ClientError):
 
         return False
+

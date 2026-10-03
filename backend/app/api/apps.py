@@ -1,4 +1,4 @@
-import os
+﻿import os
 import uuid
 import zipfile
 
@@ -3477,10 +3477,8 @@ def download_app(
             )
 
             raise HTTPException(
-                status_code=404,
-                detail=(
-                    "App file B2 storage me nahi mili"
-                ),
+                status_code=502,
+                detail="B2 download failed. Render logs check karein.",
             )
 
     # =====================================================
